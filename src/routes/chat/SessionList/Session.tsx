@@ -1,7 +1,5 @@
 // @ts-nocheck
 import { FC, useEffect, useState, memo } from "react";
-import { useDrop } from "react-dnd";
-import { NativeTypes } from "react-dnd-html5-backend";
 import { NavLink, useMatch, useNavigate } from "react-router-dom";
 import clsx from "clsx";
 
@@ -10,7 +8,6 @@ import { ChatContext } from "@/types/common";
 import Avatar from "@/components/Avatar";
 import User from "@/components/User";
 import useContextMenu from "@/hooks/useContextMenu";
-import useUploadFile from "@/hooks/useUploadFile";
 import { fromNowTime } from "@/utils";
 import IconLock from "@/assets/icons/lock.svg";
 import IconMute from "@/assets/icons/mute.svg";
@@ -40,28 +37,6 @@ const Session: FC<IProps> = ({
   // const { pathname } = useLocation();
   const isCurrentPath = useMatch(navPath);
   const navigate = useNavigate();
-  const { addStageFile } = useUploadFile({ context: type, id });
-
-  const [{ isActive }, drop] = useDrop(
-    () => ({
-      accept: [NativeTypes.FILE],
-      drop({ files }) {
-        if (files.length) {
-          const filesData = files.map((file) => {
-            const { size, type, name } = file;
-            const url = URL.createObjectURL(file);
-            return { size, type, name, url };
-          });
-          addStageFile(filesData);
-          navigate(type == "dm" ? `/chat/dm/${id}` : `/chat/channel/${id}`);
-        }
-      },
-      collect: (monitor) => ({
-        isActive: monitor.canDrop() && monitor.isOver(),
-      }),
-    }),
-    [type, id]
-  );
   const { visible: contextMenuVisible, handleContextMenuEvent, hideContextMenu } = useContextMenu();
   const [data, setData] = useState<{
     name: string;
@@ -133,11 +108,9 @@ const Session: FC<IProps> = ({
         deleteChannel={setDeleteChannelId}
       >
         <NavLink
-          ref={drop}
           className={({ isActive: linkActive }) =>
             clsx(
               `nav flex gap-2 rounded-lg p-2 w-full`,
-              isActive && "shadow-[inset_0_0_0_2px_#52edff]",
               linkActive && "bg-gray-500/20",
               pinned ? "md:hover:bg-gray-300/20" : "md:hover:bg-gray-500/20"
             )

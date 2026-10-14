@@ -99,6 +99,7 @@ checkBrowsers(paths.appPath, isInteractive)
       fs.writeFileSync(`${buildFolder}/VERSION`, require("../package.json").version);
       const hash = md5File.sync(`${buildFolder}/VERSION`);
       fs.writeFileSync(`${buildFolder}/web.vocechat.md5`, hash);
+      process.exit(0);
     },
     (err) => {
       const tscCompileOnError = process.env.TSC_COMPILE_ON_ERROR === "true";

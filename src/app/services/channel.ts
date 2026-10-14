@@ -211,7 +211,7 @@ export const channelApi = createApi({
         },
         url: `/group/${id}/send`,
         method: "POST",
-        body: type == "file" ? JSON.stringify(content) : content
+        body: type == "file" || type == "audio" ? JSON.stringify(content) : content
       }),
       async onQueryStarted(param1, param2) {
         await onMessageSendStarted.call(this, param1, param2, "channel");

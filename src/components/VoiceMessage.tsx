@@ -16,37 +16,55 @@ export type VoiceMessageProps = {
 };
 // 全局存储 Voice 信息
 const VoiceMap: { [key: string]: WaveSurfer | null } = {};
-const VoiceMessage = ({ file_path }: { file_path: string }) => {
+const VoiceMessage = ({ file_path }: { file_path: string | { path: string } }) => {
   const containerRef = useRef(null);
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState("");
-  const initWave = async (file_path: string) => {
+
+  let resolvedPath = "";
+  if (typeof file_path === "string") {
+    try {
+      const parsed = JSON.parse(file_path);
+      resolvedPath = parsed?.path || file_path;
+    } catch {
+      resolvedPath = file_path;
+    }
+  } else if (file_path && typeof file_path === "object") {
+    resolvedPath = (file_path as any).path || "";
+  }
+
+  const initWave = async (filePath: string) => {
     let wave: WaveSurfer | null = null;
-    const audioSrc = `${BASE_URL}/resource/file?file_path=${encodeURIComponent(file_path)}`;
+    const audioSrc = `${BASE_URL}/resource/file?file_path=${encodeURIComponent(filePath)}`;
     console.log("audioSrc", audioSrc);
     try {
       // 先检测资源是否存在
-      await fetch(audioSrc);
+      const res = await fetch(audioSrc);
+      if (!res.ok) {
+        throw new Error(`Audio fetch failed: ${res.statusText}`);
+      }
       wave = WaveSurfer.create({
         container: containerRef.current ?? "",
         height: 32,
         waveColor: "#0BA5EC",
         cursorColor: "#0BA5AA",
         progressColor: "#0BA5AA",
-        hideScrollbar: true,
-        normalize: true
+        normalize: true,
+        url: audioSrc
       });
-      wave.load(audioSrc);
       wave.on("play", function () {
         setPlaying(true);
       });
       wave.on("pause", function () {
         setPlaying(false);
       });
+      wave.on("finish", function () {
+        setPlaying(false);
+      });
       wave.on("ready", function () {
         setStatus("ready");
-        const current = VoiceMap[file_path];
+        const current = VoiceMap[filePath];
         if (current) {
           const dur = current.getDuration();
           const num = Math.ceil(dur);
@@ -54,26 +72,25 @@ const VoiceMessage = ({ file_path }: { file_path: string }) => {
           setDuration(durDisplay);
         }
       });
-      VoiceMap[file_path] = wave;
+      VoiceMap[filePath] = wave;
     } catch (error) {
       console.error(error);
-      
       setStatus("error");
     }
   };
   useEffect(() => {
-    if (containerRef.current && file_path) {
-      initWave(file_path);
+    if (containerRef.current && resolvedPath) {
+      initWave(resolvedPath);
     }
     return () => {
-      const current = VoiceMap[file_path];
+      const current = VoiceMap[resolvedPath];
       if (current) {
         current.destroy();
       }
     };
-  }, [file_path]);
+  }, [resolvedPath]);
   const handleClick = () => {
-    const current = VoiceMap[file_path];
+    const current = VoiceMap[resolvedPath];
     if (current) {
       if (!current.isPlaying()) {
         // 先停掉其他的

@@ -262,7 +262,7 @@ export const messageApi = createApi({
         },
         url: `/message/${reply_mid}/reply`,
         method: "POST",
-        body: content
+        body: type == "file" || type == "audio" ? JSON.stringify(content) : content
       }),
       async onQueryStarted(param1, param2) {
         await onMessageSendStarted.call(this, param1, param2, param1.context);

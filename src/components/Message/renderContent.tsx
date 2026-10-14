@@ -59,8 +59,18 @@ const renderContent = ({
       break;
     case ContentTypes.audio:
       {
-        // const { url, secure_url } = properties; todo
-        ctn = <VoiceMessage file_path={content} />;
+        let audioPath = content;
+        if (typeof content === "object" && (content as any)?.path) {
+          audioPath = (content as any).path;
+        } else if (typeof content === "string") {
+          try {
+            const parsed = JSON.parse(content);
+            if (parsed && typeof parsed === "object" && parsed.path) {
+              audioPath = parsed.path;
+            }
+          } catch {}
+        }
+        ctn = <VoiceMessage file_path={audioPath} />;
       }
       break;
     case ContentTypes.file:

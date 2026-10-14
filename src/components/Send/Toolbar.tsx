@@ -1,14 +1,13 @@
-import { ChangeEvent, FC, useRef } from "react";
+import { FC } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ChatContext } from "@/types/common";
-import useUploadFile from "@/hooks/useUploadFile";
-import AddIcon from "@/assets/icons/add.solid.svg";
 import ExitFullscreenIcon from "@/assets/icons/fullscreen.exit.svg";
 import FullscreenIcon from "@/assets/icons/fullscreen.svg";
 import MarkdownIcon from "@/assets/icons/markdown.svg";
 import SendIcon from "@/assets/icons/send.svg";
 import Tooltip from "../Tooltip";
+import AudioRecorder from "./AudioRecorder";
 
 type Props = {
   sendMessages: () => void;
@@ -30,26 +29,6 @@ const Toolbar: FC<Props> = ({
   to,
   context
 }) => {
-  const { t } = useTranslation();
-  const { addStageFile } = useUploadFile({ context, id: to });
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const handleUpload = (evt: ChangeEvent<HTMLInputElement>) => {
-    if (!evt.target.files) return;
-    const files = Array.from(evt.target.files);
-    const filesData = files.map((file) => {
-      const { size, type, name } = file;
-      const url = URL.createObjectURL(file);
-      return { size, type, name, url };
-    });
-    addStageFile(filesData);
-    // todo: check code logic
-    // @ts-ignore
-    fileInputRef.current.value = null;
-    // @ts-ignore
-    fileInputRef.current.value = "";
-    // setFiles([...evt.target.files]);
-  };
-
   const isMarkdown = mode == "markdown";
   return (
     <div className={`flex  items-center justify-end gap-2.5`}>
@@ -76,26 +55,7 @@ const Toolbar: FC<Props> = ({
       </div>
       {!isMarkdown && (
         <>
-          <Tooltip placement="top" tip={t("action.upload")}>
-            <div className="cursor-pointer relative w-6 h-6">
-              <AddIcon className="dark:fill-gray-300" />
-              <label
-                htmlFor="file"
-                className=" cursor-pointer absolute left-0 top-0 w-full h-full opacity-0"
-              >
-                <input
-                  className="hidden"
-                  size={24}
-                  ref={fileInputRef}
-                  multiple={true}
-                  onChange={handleUpload}
-                  type="file"
-                  name="file"
-                  id="file"
-                />
-              </label>
-            </div>
-          </Tooltip>
+          <AudioRecorder context={context} to={to} />
           {sendVisible && (
             <Tooltip placement="top" tip="Send">
               <SendIcon

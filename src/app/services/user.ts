@@ -266,7 +266,7 @@ export const userApi = createApi({
         },
         url: `/user/${id}/send`,
         method: "POST",
-        body: type == "file" ? JSON.stringify(content) : content,
+        body: type == "file" || type == "audio" ? JSON.stringify(content) : content,
       }),
       async onQueryStarted(param1, param2) {
         // @ts-ignore

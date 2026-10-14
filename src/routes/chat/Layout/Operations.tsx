@@ -6,13 +6,11 @@ import { updateSelectMessages } from "@/app/slices/ui";
 import { useAppDispatch, useAppSelector } from "@/app/store";
 import { ChatContext } from "@/types/common";
 import DeleteMessageConfirmModal from "@/components/DeleteMessageConfirm";
-import ForwardModal from "@/components/ForwardModal";
 import useDeleteMessage from "@/hooks/useDeleteMessage";
 import useFavMessage from "@/hooks/useFavMessage";
 import IconBookmark from "@/assets/icons/bookmark.svg";
 import IconClose from "@/assets/icons/close.circle.svg";
 import IconDelete from "@/assets/icons/delete.svg";
-import IconForward from "@/assets/icons/forward.svg";
 import { shallowEqual } from "react-redux";
 
 type Props = {
@@ -24,7 +22,6 @@ const Operations: FC<Props> = ({ context, id }) => {
   const { canDelete } = useDeleteMessage();
   const { addFavorite } = useFavMessage({});
   const mids = useAppSelector((store) => store.ui.selectMessages[`${context}_${id}`], shallowEqual);
-  const [forwardModalVisible, setForwardModalVisible] = useState(false);
   const dispatch = useAppDispatch();
 
   const handleClose = () => {
@@ -49,10 +46,6 @@ const Operations: FC<Props> = ({ context, id }) => {
     }
   };
 
-  const toggleForwardModal = () => {
-    setForwardModalVisible((prev) => !prev);
-  };
-
   useKey("Escape", () => {
     dispatch(updateSelectMessages({ context, id, operation: "reset" }));
   });
@@ -62,9 +55,6 @@ const Operations: FC<Props> = ({ context, id }) => {
   return (
     <>
       <div className="relative p-4 flex-center gap-8 shadow-md">
-        <button className={optClass} onClick={toggleForwardModal}>
-          <IconForward />
-        </button>
         <button className={optClass} onClick={handleFav}>
           <IconBookmark />
         </button>
@@ -80,7 +70,6 @@ const Operations: FC<Props> = ({ context, id }) => {
           onClick={handleClose}
         />
       </div>
-      {forwardModalVisible && <ForwardModal mids={mids} closeModal={toggleForwardModal} />}
       {deleteModalVisible && (
         <DeleteMessageConfirmModal mids={mids} closeModal={toggleDeleteModal} />
       )}

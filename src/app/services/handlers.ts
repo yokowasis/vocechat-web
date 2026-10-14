@@ -30,7 +30,7 @@ export const onMessageSendStarted = async (
   // const isImage = properties.content_type?.startsWith("image");
   const ts = properties.local_id || +new Date();
   const tmpMsg = {
-    content: isMedia ? content.path : content,
+    content: isMedia && typeof content === "object" ? content.path : content,
     content_type: ContentTypes[type],
     created_at: ts,
     properties,

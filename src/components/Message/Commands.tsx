@@ -13,7 +13,6 @@ import useSendMessage from "@/hooks/useSendMessage";
 import IconBookmark from "@/assets/icons/bookmark.add.svg";
 import IconDelete from "@/assets/icons/delete.svg";
 import editIcon from "@/assets/icons/edit.svg?url";
-import IconForward from "@/assets/icons/forward.svg";
 import moreIcon from "@/assets/icons/more.svg?url";
 import IconPin from "@/assets/icons/pin.svg";
 import reactIcon from "@/assets/icons/reaction.svg?url";
@@ -47,11 +46,9 @@ const Commands: FC<Props> = ({
     unPin,
     pinned,
     toggleDeleteModal,
-    toggleForwardModal,
     togglePinModal,
     PinModal,
-    DeleteModal,
-    ForwardModal
+    DeleteModal
   } = useMessageOperation({ mid, context, contextId });
   const { setReplying } = useSendMessage({ context, to: contextId });
   const { addFavorite, isFavorited } = useFavMessage({
@@ -152,11 +149,6 @@ const Commands: FC<Props> = ({
                     handler: pinned ? handleUnpin : togglePinModal
                   },
                   {
-                    title: t("action.forward"),
-                    icon: <IconForward className="icon" />,
-                    handler: toggleForwardModal
-                  },
-                  {
                     title: t("action.select"),
                     icon: <IconSelect className="icon" />,
                     handler: handleSelect.bind(null, mid)
@@ -180,7 +172,6 @@ const Commands: FC<Props> = ({
         </Tippy>
       </ul>
       {PinModal}
-      {ForwardModal}
       {DeleteModal}
     </>
   );

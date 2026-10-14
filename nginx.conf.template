@@ -1,0 +1,58 @@
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+}
+
+server {
+    listen ${PORT};
+    server_name localhost;
+
+    client_max_body_size ${CLIENT_MAX_BODY_SIZE};
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
+
+    # Static frontend assets
+    location / {
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+        try_files $uri $uri/ /index.html;
+
+        # Disable cache for HTML files to ensure clients always get latest index
+        location ~* \.html$ {
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+        }
+
+        # Cache static assets (hashed JS, CSS, images, fonts)
+        location ~* \.(?:css|js|woff2?|eot|ttf|otf|ico|png|jpg|jpeg|gif|svg|webp)$ {
+            expires 1y;
+            add_header Cache-Control "public, max-age=31536000, immutable";
+        }
+    }
+
+    # Proxy API and real-time SSE/WebSocket requests to VoceChat backend
+    location /api/ {
+        proxy_pass ${BACKEND_URL}/api/;
+        proxy_http_version 1.1;
+
+        # WebSocket & connection upgrade support
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Server-Sent Events (SSE) streaming support for /api/user/events
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding off;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}

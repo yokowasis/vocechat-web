@@ -13,7 +13,6 @@ import { MentionData, MessageWithMentions } from "@/types/message";
 import { useAppSelector } from "@/app/store";
 import { shallowEqual } from "react-redux";
 import { ChatContext } from "@/types/common";
-import useUploadFile from "@/hooks/useUploadFile";
 
 export const initialMessage = [
   {
@@ -40,8 +39,6 @@ export default function MessageInput({
   sendMessage,
   updateMessage
 }: Props) {
-  const [context, to] = id.split("_") as [ChatContext, number];
-  const { addStageFile } = useUploadFile({ context, id: to });
   const userData = useAppSelector((store) => store.users.byId, shallowEqual);
   const editorContainerRef = useRef(null);
   const [input, setInput] = useLocalstorageState(id, initialMessage);
@@ -60,27 +57,7 @@ export default function MessageInput({
     const text = getMessageFromPlateValues(input as ParagraphInput[]);
     updateMessage(text);
   }, [input]);
-  // 监听文件粘贴事件
-  useEffect(() => {
-    const handlePasteEvent = (evt: ClipboardEvent<Window>) => {
-      const files = [...evt.clipboardData.files];
-      if (files.length) {
-        const filesData = files.map((file) => {
-          const { size, type, name } = file;
-          // console.log("paste event name", name);
-          const url = URL.createObjectURL(file);
-          return { size, type, name, url };
-        });
-        addStageFile(filesData);
-      }
-    };
-    // @ts-ignore
-    window.addEventListener("paste", handlePasteEvent, true);
-    return () => {
-      // @ts-ignore
-      window.removeEventListener("paste", handlePasteEvent, true);
-    };
-  }, [id]);
+
   const items: MentionData[] = members.map((uid) => ({
     key: `${uid}`,
     text: userData[uid]?.name || "",

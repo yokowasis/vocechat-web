@@ -1,6 +1,4 @@
 import { FC, ReactElement, useEffect, useRef } from "react";
-import { useDrop } from "react-dnd";
-import { NativeTypes } from "react-dnd-html5-backend";
 import { toast } from "react-hot-toast";
 import clsx from "clsx";
 
@@ -9,11 +7,8 @@ import { ChatContext } from "@/types/common";
 import ImagePreview from "@/components/ImagePreview";
 import Send from "@/components/Send";
 import useLicense from "@/hooks/useLicense";
-import useUploadFile from "@/hooks/useUploadFile";
-import IconWarning from "@/assets/icons/warning.svg";
 import AddContactTip from "./AddContactTip";
 import DMVoice from "./DMVoicing";
-import DnDTip from "./DnDTip";
 import LicenseUpgradeTip from "./LicenseOutdatedTip";
 import LoginTip from "./LoginTip";
 import Operations from "./Operations";
@@ -46,7 +41,6 @@ const Layout: FC<Props> = ({
 }) => {
   // const { t } = useTranslation('chat');
   const { reachLimit } = useLicense();
-  const { addStageFile } = useUploadFile({ context, id: to });
   const inputMode = useAppSelector((store) => store.ui.inputMode, shallowEqual);
   const selects = useAppSelector(
     (store) => store.ui.selectMessages[`${context}_${to}`],
@@ -54,48 +48,11 @@ const Layout: FC<Props> = ({
   );
   const channelsData = useAppSelector((store) => store.channels.byId, shallowEqual);
   const usersData = useAppSelector((store) => store.users.byId, shallowEqual);
-  const [{ isActive }, drop] = useDrop(
-    () => ({
-      accept: [NativeTypes.FILE],
-      drop({ files }) {
-        // console.log("iii", inputMode);
-        if (inputMode !== "text") {
-          toast("DnD not allowed in this input mode", {
-            icon: <IconWarning className="w-5 h-5" />
-          });
-          return;
-        }
-        if (files.length) {
-          const filesData = files.map((file) => {
-            const { size, type, name } = file;
-            const url = URL.createObjectURL(file);
-            return { size, type, name, url };
-          });
-          addStageFile(filesData);
-        }
-      },
-      collect: (monitor) => ({
-        isActive: monitor.canDrop() && monitor.isOver()
-      })
-    }),
-    [context, to, inputMode]
-  );
-
-  useEffect(() => {
-    if (dropFiles?.length) {
-      const filesData = dropFiles.map((file) => {
-        const { size, type, name } = file;
-        const url = URL.createObjectURL(file);
-        return { size, type, name, url };
-      });
-      addStageFile(filesData);
-    }
-  }, [dropFiles]);
   const name = context == "channel" ? channelsData[to]?.name : usersData[to]?.name;
   return (
     <>
       <ImagePreview />
-      <section id="CHAT_WRAPPER" ref={drop} className={`relative h-full w-full rounded-r-2xl flex`}>
+      <section id="CHAT_WRAPPER" className={`relative h-full w-full rounded-r-2xl flex`}>
         <main className="flex flex-col flex-1">
           {header}
           <div className="w-full h-full flex items-start justify-between relative">
@@ -136,7 +93,6 @@ const Layout: FC<Props> = ({
             {voice}
           </div>
         )}
-        {!readonly && inputMode == "text" && isActive && <DnDTip context={context} name={name} />}
       </section>
     </>
   );

@@ -9,7 +9,6 @@ import useSendMessage from "@/hooks/useSendMessage";
 import IconCopy from "@/assets/icons/copy.svg";
 import IconDelete from "@/assets/icons/delete.svg";
 import IconEdit from "@/assets/icons/edit.svg";
-import IconForward from "@/assets/icons/forward.svg";
 import IconPin from "@/assets/icons/pin.svg";
 import IconReply from "@/assets/icons/reply.svg";
 import IconSelect from "@/assets/icons/select.svg";
@@ -47,10 +46,8 @@ const MessageContextMenu: FC<Props> = ({
     pinned,
     unPin,
     toggleDeleteModal,
-    toggleForwardModal,
     togglePinModal,
     PinModal,
-    ForwardModal,
     DeleteModal
   } = useMessageOperation({ mid, contextId, context, selectedText });
   const dispatch = useDispatch();
@@ -85,11 +82,6 @@ const MessageContextMenu: FC<Props> = ({
       handler: pinned ? unPin.bind(null, mid) : togglePinModal
     },
     {
-      title: t("action.forward"),
-      icon: <IconForward className="icon" />,
-      handler: toggleForwardModal
-    },
-    {
       title: t("action.select"),
       icon: <IconSelect className="icon" />,
       handler: handleSelect
@@ -103,7 +95,6 @@ const MessageContextMenu: FC<Props> = ({
   ].filter((v) => typeof v !== "boolean" && "title" in (v ?? {})) as Item[];
   return (
     <>
-      {ForwardModal}
       {PinModal}
       {DeleteModal}
       <Tippy
