@@ -8,6 +8,8 @@ import MarkdownIcon from "@/assets/icons/markdown.svg";
 import SendIcon from "@/assets/icons/send.svg";
 import Tooltip from "../Tooltip";
 import AudioRecorder from "./AudioRecorder";
+import CameraButton from "./CameraButton";
+import LocationButton from "./LocationButton";
 
 type Props = {
   sendMessages: () => void;
@@ -55,6 +57,8 @@ const Toolbar: FC<Props> = ({
       </div>
       {!isMarkdown && (
         <>
+          <CameraButton context={context} to={to} />
+          <LocationButton context={context} to={to} />
           <AudioRecorder context={context} to={to} />
           {sendVisible && (
             <Tooltip placement="top" tip="Send">
