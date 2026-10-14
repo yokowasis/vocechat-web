@@ -13,7 +13,7 @@ services:
     container_name: vocechat-web
     restart: unless-stopped
     expose:
-      - "8080"
+      - "80"
     environment:
       - BACKEND_URL=http://vocechat-server:3000
       - PORT=80
