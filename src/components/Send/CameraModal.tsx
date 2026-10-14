@@ -4,6 +4,7 @@ import { shallowEqual } from "react-redux";
 
 import { useAppSelector } from "@/app/store";
 import { ChatContext } from "@/types/common";
+import { isMobile } from "@/utils";
 import useUploadFile from "@/hooks/useUploadFile";
 import useSendMessage from "@/hooks/useSendMessage";
 import Modal from "../Modal";
@@ -11,6 +12,7 @@ import IconClose from "@/assets/icons/close.svg";
 import IconCamera from "@/assets/icons/camera.photo.svg";
 import RefreshIcon from "@/assets/icons/refresh.svg";
 import UploadIcon from "@/assets/icons/upload.image.svg";
+import { normalizeImageOrientation } from "./imageUtils";
 
 interface Props {
   context: ChatContext;
@@ -24,12 +26,14 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [videoReady, setVideoReady] = useState(false);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [capturedUrl, setCapturedUrl] = useState<string | null>(null);
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const from_uid = useAppSelector((store) => store.authData.user?.uid || 0, shallowEqual);
   const { uploadFile, addStageFile } = useUploadFile({ context, id: to });
   const { sendMessage } = useSendMessage({ context, from: from_uid, to });
@@ -48,41 +52,94 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
   }, []);
 
   const stopStream = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     }
-  }, [stream]);
+    setStream(null);
+    setVideoReady(false);
+  }, []);
+
+  const attachStreamToVideo = useCallback(
+    (video: HTMLVideoElement | null, mediaStream: MediaStream | null) => {
+      if (!video || !mediaStream) return;
+      try {
+        video.srcObject = mediaStream;
+        video.muted = true;
+        video.playsInline = true;
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.warn("Camera video play error:", err);
+          });
+        }
+      } catch (err) {
+        console.warn("Error attaching media stream to video:", err);
+      }
+    },
+    []
+  );
+
+  // Callback ref ensures stream is attached as soon as video DOM node mounts
+  const setVideoRef = useCallback(
+    (video: HTMLVideoElement | null) => {
+      videoRef.current = video;
+      if (video && streamRef.current) {
+        attachStreamToVideo(video, streamRef.current);
+      }
+    },
+    [attachStreamToVideo]
+  );
 
   const startCamera = useCallback(
     async (mode: "user" | "environment") => {
       stopStream();
       setCameraError(null);
+      setVideoReady(false);
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setCameraError("Camera is not supported by your browser or environment.");
         return;
       }
 
+      const isMobileDevice = isMobile();
+      const isPortrait = typeof window !== "undefined" && window.innerHeight > window.innerWidth;
+
       try {
-        const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: mode,
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
+        // Desktop / PC cameras do not reliably support facingMode constraint;
+        // only apply facingMode and portrait dimension preferences on mobile devices.
+        const constraints: MediaStreamConstraints = {
+          video: isMobileDevice
+            ? {
+                facingMode: mode,
+                width: { ideal: isPortrait ? 1080 : 1920 },
+                height: { ideal: isPortrait ? 1920 : 1080 }
+              }
+            : {
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              },
           audio: false
-        });
+        };
+
+        const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        streamRef.current = mediaStream;
         setStream(mediaStream);
+        if (videoRef.current) {
+          attachStreamToVideo(videoRef.current, mediaStream);
+        }
       } catch (err: any) {
-        console.error("Camera access with constraints error:", err);
-        // Fallback: try basic video constraints without facingMode/resolution
+        console.error("Camera access error with ideal constraints, trying fallback:", err);
         try {
           const fallbackStream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: false
           });
+          streamRef.current = fallbackStream;
           setStream(fallbackStream);
+          if (videoRef.current) {
+            attachStreamToVideo(videoRef.current, fallbackStream);
+          }
           return;
         } catch (fallbackErr: any) {
           console.error("Fallback camera access error:", fallbackErr);
@@ -97,7 +154,7 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
         setCameraError(msg);
       }
     },
-    [stopStream]
+    [stopStream, attachStreamToVideo]
   );
 
   useEffect(() => {
@@ -109,46 +166,43 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
     };
   }, [isOpen, facingMode, capturedFile, startCamera, stopStream]);
 
-  // Bind video element to media stream
-  useEffect(() => {
-    if (videoRef.current && stream && !capturedUrl) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(() => {});
-    }
-  }, [stream, capturedUrl]);
-
   const handleCapture = () => {
-    if (!videoRef.current) return;
     const video = videoRef.current;
+    if (!video || !videoReady || video.videoWidth === 0 || video.videoHeight === 0) {
+      toast.error("Camera is not ready yet. Please wait a moment.");
+      return;
+    }
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
     const canvas = document.createElement("canvas");
-    const width = video.videoWidth || 1280;
-    const height = video.videoHeight || 720;
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    if (facingMode === "user") {
+    if (isMobile() && facingMode === "user") {
       ctx.translate(width, 0);
       ctx.scale(-1, 1);
     }
     ctx.drawImage(video, 0, 0, width, height);
 
     canvas.toBlob(
-      (blob) => {
+      async (blob) => {
         if (!blob) {
           toast.error("Failed to capture image.");
           return;
         }
         const fileName = `camera_${Date.now()}.jpg`;
-        const file = new File([blob], fileName, { type: "image/jpeg" });
-        const previewUrl = URL.createObjectURL(blob);
-        setCapturedFile(file);
+        const rawFile = new File([blob], fileName, { type: "image/jpeg" });
+        const normalizedFile = await normalizeImageOrientation(rawFile);
+        const previewUrl = URL.createObjectURL(normalizedFile);
+        setCapturedFile(normalizedFile);
         setCapturedUrl(previewUrl);
         stopStream();
       },
       "image/jpeg",
-      0.92
+      0.95
     );
   };
 
@@ -251,7 +305,7 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
         </div>
 
         {/* Viewfinder or Captured Preview */}
-        <div className="relative bg-black flex items-center justify-center min-h-[300px] max-h-[60vh] overflow-hidden">
+        <div className="relative bg-black flex items-center justify-center min-h-[320px] max-h-[60vh] w-full overflow-hidden">
           {capturedUrl ? (
             <img
               src={capturedUrl}
@@ -276,21 +330,35 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
           ) : (
             <>
               <video
-                ref={videoRef}
+                ref={setVideoRef}
                 autoPlay
                 playsInline
                 muted
-                className={`w-full h-full max-h-[60vh] object-cover ${
-                  facingMode === "user" ? "-scale-x-100" : ""
+                onLoadedMetadata={(e) => {
+                  const v = e.currentTarget;
+                  v.play().catch(console.warn);
+                  setVideoReady(true);
+                }}
+                onPlaying={() => setVideoReady(true)}
+                className={`w-full max-h-[60vh] object-contain ${
+                  isMobile() && facingMode === "user" ? "-scale-x-100" : ""
                 }`}
               />
+
+              {!videoReady && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white bg-black/70">
+                  <span className="w-8 h-8 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" />
+                  <span className="text-xs text-gray-300">Starting camera preview...</span>
+                </div>
+              )}
+
               {/* Switch camera button if multiple cameras exist */}
-              {hasMultipleCameras && (
+              {hasMultipleCameras && videoReady && (
                 <button
                   type="button"
                   onClick={handleToggleFacingMode}
                   title="Switch camera"
-                  className="absolute top-3 right-3 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-sm transition-all"
+                  className="absolute top-3 right-3 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm transition-all"
                 >
                   <RefreshIcon className="w-5 h-5 fill-current" />
                 </button>
@@ -350,8 +418,9 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
               <button
                 type="button"
                 onClick={handleCapture}
-                title="Take photo"
-                className="cursor-pointer group flex items-center justify-center w-14 h-14 rounded-full border-4 border-primary-500 p-1 hover:scale-105 active:scale-95 transition-all shadow-md"
+                disabled={!videoReady || isSending}
+                title={videoReady ? "Take photo" : "Waiting for camera..."}
+                className="cursor-pointer group flex items-center justify-center w-14 h-14 rounded-full border-4 border-primary-500 p-1 hover:scale-105 active:scale-95 transition-all shadow-md disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed"
               >
                 <div className="w-full h-full rounded-full bg-primary-500 group-hover:bg-primary-600 transition-colors" />
               </button>

@@ -9,6 +9,7 @@ import Tooltip from "../Tooltip";
 import IconCamera from "@/assets/icons/camera.photo.svg";
 import IconImage from "@/assets/icons/image.svg";
 import CameraModal from "./CameraModal";
+import { normalizeImageOrientation } from "./imageUtils";
 
 interface Props {
   context: ChatContext;
@@ -59,7 +60,7 @@ const CameraButton: FC<Props> = ({ context, to }) => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const { addStageFile } = useUploadFile({ context, id: to });
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
 
     const files = Array.from(e.target.files);
@@ -84,7 +85,17 @@ const CameraButton: FC<Props> = ({ context, to }) => {
     }
 
     if (acceptedFiles.length > 0) {
-      const filesData = acceptedFiles.map((file) => {
+      // Normalize orientation based on EXIF tags (solves phone portrait photos appearing landscape)
+      const normalizedFiles = await Promise.all(
+        acceptedFiles.map(async (file) => {
+          if (file.type.startsWith("image/")) {
+            return await normalizeImageOrientation(file);
+          }
+          return file;
+        })
+      );
+
+      const filesData = normalizedFiles.map((file) => {
         const { size, type, name } = file;
         const url = URL.createObjectURL(file);
         return { size, type, name, url };
