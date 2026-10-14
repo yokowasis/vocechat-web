@@ -1,0 +1,25 @@
+services:
+  vocechat-server:
+    image: privoce/vocechat-server:latest
+    container_name: vocechat-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - vocechat-data:/home/vocechat-server/data
+
+  vocechat-web:
+    image: yokowasis/vocechat:latest
+    container_name: vocechat-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - BACKEND_URL=http://vocechat-server:3000
+      - PORT=80
+      - CLIENT_MAX_BODY_SIZE=100M
+    depends_on:
+      - vocechat-server
+
+volumes:
+  vocechat-data:

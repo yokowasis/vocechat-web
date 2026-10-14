@@ -47,7 +47,8 @@ docker build -t vocechat-web:latest .
 To build with a specific tag (e.g., your GitHub Docker registry or custom version):
 
 ```bash
-docker build -t yokowasis/vocechat-web:latest .
+docker build -t yokowasis/vocechat:latest .
+docker push yokowasis/vocechat:latest
 ```
 
 ---
@@ -64,7 +65,7 @@ docker run -d \
   -p 8080:80 \
   -e BACKEND_URL=http://host.docker.internal:3000 \
   --add-host=host.docker.internal:host-gateway \
-  vocechat-web:latest
+  yokowasis/vocechat:latest
 ```
 
 Open your browser at `http://localhost:8080`.
@@ -88,21 +89,21 @@ docker run -d \
   --network vocechat-net \
   -p 8080:80 \
   -e BACKEND_URL=http://vocechat-server:3000 \
-  vocechat-web:latest
+  yokowasis/vocechat:latest
 ```
 
 ---
 
 ## 5. Running Full Stack with Docker Compose
 
-An example compose configuration is provided in `docker-compose.example.yml`.
+A ready-to-run compose configuration is provided in `docker-compose.yml` (and an example in `docker-compose.example.yml`).
 
 ### Quick Start:
 ```bash
-docker compose -f docker-compose.example.yml up -d
+docker compose up -d
 ```
 
-### `docker-compose.example.yml` Content:
+### `docker-compose.yml` Content:
 ```yaml
 services:
   vocechat-server:
@@ -115,10 +116,7 @@ services:
       - vocechat-data:/home/vocechat-server/data
 
   vocechat-web:
-    image: vocechat-web:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: yokowasis/vocechat:latest
     container_name: vocechat-web
     restart: unless-stopped
     ports:
