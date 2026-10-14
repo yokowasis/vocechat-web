@@ -4,9 +4,8 @@ import { shallowEqual } from "react-redux";
 
 import { useAppSelector } from "@/app/store";
 import { ChatContext } from "@/types/common";
-import { ContentTypes } from "@/app/config";
-import useAddLocalFileMessage from "@/hooks/useAddLocalFileMessage";
 import useUploadFile from "@/hooks/useUploadFile";
+import useSendMessage from "@/hooks/useSendMessage";
 import Modal from "../Modal";
 import IconClose from "@/assets/icons/close.svg";
 import IconCamera from "@/assets/icons/camera.photo.svg";
@@ -28,13 +27,14 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [capturedUrl, setCapturedUrl] = useState<string | null>(null);
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const from_uid = useAppSelector((store) => store.authData.user?.uid || 0, shallowEqual);
-  const addLocalFileMessage = useAddLocalFileMessage({ context, to });
-  const { addStageFile } = useUploadFile({ context, id: to });
+  const { uploadFile, addStageFile } = useUploadFile({ context, id: to });
+  const { sendMessage } = useSendMessage({ context, from: from_uid, to });
 
-  // Check if multiple camera devices exist
+  // Detect available video input devices
   useEffect(() => {
     if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
       navigator.mediaDevices
@@ -60,7 +60,7 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
       setCameraError(null);
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setCameraError("Camera is not supported by your browser.");
+        setCameraError("Camera is not supported by your browser or environment.");
         return;
       }
 
@@ -68,20 +68,29 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: mode,
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
           },
           audio: false
         });
         setStream(mediaStream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-        }
       } catch (err: any) {
-        console.error("Camera access error:", err);
+        console.error("Camera access with constraints error:", err);
+        // Fallback: try basic video constraints without facingMode/resolution
+        try {
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+          setStream(fallbackStream);
+          return;
+        } catch (fallbackErr: any) {
+          console.error("Fallback camera access error:", fallbackErr);
+        }
+
         let msg = "Could not access camera. Please check your camera permissions.";
         if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-          msg = "Camera permission was denied.";
+          msg = "Camera permission was denied. Please allow camera access in browser settings.";
         } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
           msg = "No camera device found on this system.";
         }
@@ -94,35 +103,36 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
   useEffect(() => {
     if (isOpen && !capturedFile) {
       startCamera(facingMode);
-    } else if (!isOpen) {
-      stopStream();
-      if (capturedUrl) {
-        URL.revokeObjectURL(capturedUrl);
-        setCapturedUrl(null);
-        setCapturedFile(null);
-      }
     }
     return () => {
       stopStream();
     };
-  }, [isOpen, facingMode, capturedFile]);
+  }, [isOpen, facingMode, capturedFile, startCamera, stopStream]);
 
+  // Bind video element to media stream
   useEffect(() => {
-    if (videoRef.current && stream && !capturedFile) {
+    if (videoRef.current && stream && !capturedUrl) {
       videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {});
     }
-  }, [stream, capturedFile]);
+  }, [stream, capturedUrl]);
 
   const handleCapture = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    if (facingMode === "user") {
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, width, height);
 
     canvas.toBlob(
       (blob) => {
@@ -132,9 +142,9 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
         }
         const fileName = `camera_${Date.now()}.jpg`;
         const file = new File([blob], fileName, { type: "image/jpeg" });
-        const url = URL.createObjectURL(blob);
+        const previewUrl = URL.createObjectURL(blob);
         setCapturedFile(file);
-        setCapturedUrl(url);
+        setCapturedUrl(previewUrl);
         stopStream();
       },
       "image/jpeg",
@@ -157,50 +167,74 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
     startCamera(newMode);
   };
 
-  const handleSendNow = () => {
-    if (!capturedFile || !capturedUrl) return;
-
-    const ts = +new Date();
-    addLocalFileMessage({
-      mid: ts,
-      content: capturedUrl,
-      content_type: ContentTypes.file,
-      created_at: ts,
-      properties: {
-        content_type: capturedFile.type,
-        name: capturedFile.name,
-        size: capturedFile.size,
-        local_id: ts
-      },
-      from_uid,
-      sending: true
-    });
-
-    toast.success("Photo sent!");
+  const handleClose = () => {
+    stopStream();
+    if (capturedUrl) {
+      URL.revokeObjectURL(capturedUrl);
+      setCapturedUrl(null);
+    }
+    setCapturedFile(null);
     onClose();
   };
 
-  const handleAttachToDraft = () => {
-    if (!capturedFile || !capturedUrl) return;
+  const handleSendNow = async () => {
+    if (!capturedFile || isSending) return;
 
+    setIsSending(true);
+    const toastId = toast.loading("Sending photo...");
+
+    try {
+      const uploadRes = await uploadFile(capturedFile);
+      if (!uploadRes || !uploadRes.path) {
+        toast.error("Failed to upload photo.", { id: toastId });
+        setIsSending(false);
+        return;
+      }
+
+      await sendMessage({
+        type: "file",
+        content: { path: uploadRes.path },
+        properties: {
+          content_type: capturedFile.type,
+          name: capturedFile.name,
+          size: capturedFile.size,
+          local_id: +new Date()
+        }
+      });
+
+      toast.success("Photo sent!", { id: toastId });
+      handleClose();
+    } catch (err) {
+      console.error("Error sending photo:", err);
+      toast.error("Failed to send photo.", { id: toastId });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleAttachToDraft = () => {
+    if (!capturedFile) return;
+
+    // Create a persistent object URL for the staged draft file
+    const stageUrl = URL.createObjectURL(capturedFile);
     addStageFile([
       {
         name: capturedFile.name,
         type: capturedFile.type,
         size: capturedFile.size,
-        url: capturedUrl
+        url: stageUrl
       }
     ]);
 
     toast.success("Photo added to message draft.");
-    onClose();
+    handleClose();
   };
 
   if (!isOpen) return null;
 
   return (
     <Modal mask={true}>
-      <div className="relative w-full max-w-lg bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700 mx-4">
+      <div className="relative w-full max-w-lg bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700 mx-4 animate-zoomIn">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700/60">
           <div className="flex items-center gap-2 text-gray-800 dark:text-gray-100 font-semibold text-base">
@@ -209,7 +243,7 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
             <IconClose className="w-4 h-4 fill-current" />
@@ -231,7 +265,7 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  handleClose();
                   onSelectFilesClick();
                 }}
                 className="mt-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg text-sm font-medium transition-colors"
@@ -272,7 +306,8 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
               <button
                 type="button"
                 onClick={handleRetake}
-                className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors"
+                disabled={isSending}
+                className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors disabled:opacity-50"
               >
                 Retake
               </button>
@@ -280,16 +315,21 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
                 <button
                   type="button"
                   onClick={handleAttachToDraft}
-                  className="px-4 py-2 rounded-lg text-sm font-medium border border-primary-500 text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-950/30 transition-colors"
+                  disabled={isSending}
+                  className="px-4 py-2 rounded-lg text-sm font-medium border border-primary-500 text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-950/30 transition-colors disabled:opacity-50"
                 >
                   Attach to Draft
                 </button>
                 <button
                   type="button"
                   onClick={handleSendNow}
-                  className="px-5 py-2 rounded-lg text-sm font-medium bg-primary-500 hover:bg-primary-600 text-white transition-colors shadow-sm"
+                  disabled={isSending}
+                  className="px-5 py-2 rounded-lg text-sm font-medium bg-primary-500 hover:bg-primary-600 text-white transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  Send Now
+                  {isSending && (
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  )}
+                  <span>{isSending ? "Sending..." : "Send Now"}</span>
                 </button>
               </div>
             </div>
@@ -298,7 +338,7 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  handleClose();
                   onSelectFilesClick();
                 }}
                 className="text-xs text-gray-500 dark:text-gray-400 hover:text-primary-500 dark:hover:text-primary-400 flex items-center gap-1.5 transition-colors"
@@ -322,7 +362,7 @@ const CameraModal: FC<Props> = ({ context, to, isOpen, onClose, onSelectFilesCli
             <div className="flex justify-end w-full">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
               >
                 Close

@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import * as Popover from "@radix-ui/react-popover";
 
 import { ChatContext } from "@/types/common";
+import { isMobile } from "@/utils";
 import useUploadFile from "@/hooks/useUploadFile";
 import Tooltip from "../Tooltip";
 import IconCamera from "@/assets/icons/camera.photo.svg";
@@ -55,6 +56,7 @@ const CameraButton: FC<Props> = ({ context, to }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const { addStageFile } = useUploadFile({ context, id: to });
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -98,13 +100,35 @@ const CameraButton: FC<Props> = ({ context, to }) => {
     fileInputRef.current?.click();
   };
 
+  const handleTakePhoto = () => {
+    setIsMenuOpen(false);
+    if (isMobile()) {
+      // Mobile devices support native camera app through file capture input
+      cameraInputRef.current?.click();
+    } else {
+      // Desktop / Web browsers use WebRTC viewfinder modal
+      setIsCameraModalOpen(true);
+    }
+  };
+
   return (
     <>
+      {/* File input for pictures and videos */}
       <input
         ref={fileInputRef}
         type="file"
         multiple
         accept="image/*,video/*"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {/* Direct camera capture input for mobile devices */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
         onChange={handleFileChange}
         className="hidden"
       />
@@ -138,10 +162,7 @@ const CameraButton: FC<Props> = ({ context, to }) => {
           >
             <button
               type="button"
-              onClick={() => {
-                setIsMenuOpen(false);
-                setIsCameraModalOpen(true);
-              }}
+              onClick={handleTakePhoto}
               className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/70 text-left transition-colors"
             >
               <IconCamera className="w-4 h-4 stroke-current text-primary-500" />
